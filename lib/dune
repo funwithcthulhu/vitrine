@@ -1,0 +1,4 @@
+(library
+ (name vitrine)
+ (public_name vitrine)
+ (libraries uri digestif))

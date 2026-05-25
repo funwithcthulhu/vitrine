@@ -1,0 +1,15 @@
+html {
+  font-family: system-ui, sans-serif;
+  color: #202020;
+  background: #f7f7f4;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 42rem;
+  margin: 4rem auto;
+  padding: 0 1rem;
+}

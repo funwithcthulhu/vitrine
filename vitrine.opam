@@ -1,0 +1,29 @@
+opam-version: "2.0"
+synopsis: "Compile a site directory into a MirageOS web appliance."
+depends: [
+  "ocaml" {>= "5.1"}
+  "dune" {>= "3.8" & >= "3.8"}
+  "uri"
+  "digestif"
+  "cmdliner"
+  "cohttp"
+  "cohttp-lwt"
+  "cohttp-lwt-unix"
+  "lwt"
+  "alcotest" {with-test}
+  "odoc" {with-doc}
+]
+build: [
+  ["dune" "subst"] {dev}
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "@install"
+    "@runtest" {with-test}
+    "@doc" {with-doc}
+  ]
+]

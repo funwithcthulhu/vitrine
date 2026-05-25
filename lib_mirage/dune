@@ -1,0 +1,4 @@
+(library
+ (name vitrine_mirage)
+ (public_name vitrine.mirage)
+ (libraries vitrine cohttp cohttp-lwt lwt))

@@ -1,0 +1,1 @@
+This filename contains a content-style hash segment for cache policy tests.
