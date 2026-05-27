@@ -294,6 +294,13 @@ let trim s =
   let right = right (len - 1) in
   if right < left then "" else String.sub s left (right - left + 1)
 
+let is_zero_q param =
+  match String.split_on_char '=' param with
+  | [ name; value ] when String.equal (lower (trim name)) "q" -> (
+      try Float.equal (float_of_string (trim value)) 0.0 with
+      | Failure _ -> false)
+  | _ -> false
+
 let accepts_encoding (request : request) name =
   match header_of request.headers "Accept-Encoding" with
   | None -> false
@@ -305,11 +312,7 @@ let accepts_encoding (request : request) name =
              | token :: params ->
                  let token = lower (trim token) in
                  let q_zero =
-                   List.exists
-                     (fun param ->
-                       let param = lower (trim param) in
-                       String.equal param "q=0" || String.equal param "q=0.0")
-                     params
+                   List.exists (fun param -> is_zero_q (trim param)) params
                  in
                  (String.equal token name || String.equal token "*") && not q_zero
              | [] -> false)

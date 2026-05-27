@@ -11,6 +11,7 @@ type route = {
 
 val response :
   Vitrine.response -> Cohttp.Response.t * Cohttp_lwt.Body.t
+(** Convert a core Vitrine response to Cohttp. *)
 
 val respond :
   ?config:Vitrine.config ->
@@ -19,6 +20,7 @@ val respond :
   Cohttp.Request.t ->
   Cohttp_lwt.Body.t ->
   (Cohttp.Response.t * Cohttp_lwt.Body.t) Lwt.t
+(** Handle a Cohttp request with optional dynamic routes before static lookup. *)
 
 val callback :
   ?config:Vitrine.config ->
@@ -28,3 +30,4 @@ val callback :
   Cohttp.Request.t ->
   Cohttp_lwt.Body.t ->
   (Cohttp.Response.t * Cohttp_lwt.Body.t) Lwt.t
+(** Cohttp server callback wrapper. The connection value is ignored. *)

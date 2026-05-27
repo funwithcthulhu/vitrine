@@ -4,7 +4,11 @@
 
 (package
  (name vitrine)
- (synopsis "Compile a site directory into a MirageOS web appliance.")
+ (synopsis "Compile a site directory into a MirageOS web appliance")
+ (description "Static-site serving logic and a Mirage/Cohttp adapter.")
+ (authors "funwithcthulhu")
+ (maintainers "funwithcthulhu29@gmail.com")
+ (license MIT)
  (depends
   (ocaml (>= 5.1))
   (dune (>= 3.8))

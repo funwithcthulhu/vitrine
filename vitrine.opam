@@ -1,8 +1,18 @@
 opam-version: "2.0"
-synopsis: "Compile a site directory into a MirageOS web appliance."
+synopsis: "Compile a site directory into a MirageOS web appliance"
+description: """
+Vitrine serves a static site from an embedded OCaml store and exposes the
+same HTTP behavior through a small Mirage/Cohttp adapter.
+"""
+maintainer: "funwithcthulhu29@gmail.com"
+authors: ["funwithcthulhu"]
+license: "MIT"
+homepage: "https://github.com/funwithcthulhu/vitrine"
+bug-reports: "https://github.com/funwithcthulhu/vitrine/issues"
+dev-repo: "git+https://github.com/funwithcthulhu/vitrine.git"
 depends: [
   "ocaml" {>= "5.1"}
-  "dune" {>= "3.8" & >= "3.8"}
+  "dune" {>= "3.8"}
   "uri"
   "digestif"
   "cmdliner"

@@ -185,6 +185,7 @@ let init_dune_project name =
 let init_opam _name =
     {|opam-version: "2.0"
 synopsis: "Static MirageOS site built with Vitrine"
+maintainer: "funwithcthulhu29@gmail.com"
 depends: [
   "ocaml" {>= "5.1"}
   "dune" {>= "3.8"}
@@ -326,14 +327,14 @@ With Mirage installed:
 
 ```sh
 mirage configure -t unix
-mirage build
+make
 ```
 
 For Solo5:
 
 ```sh
 mirage configure -t hvt
-mirage build
+make
 ```
 |}
     name

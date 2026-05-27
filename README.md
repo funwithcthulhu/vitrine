@@ -6,7 +6,13 @@ Vitrine serves static files from a deterministic store and keeps the HTTP detail
 
 ## Quickstart
 
-Build and test the package:
+Install development dependencies for this checkout:
+
+```sh
+opam install . --deps-only --with-test --with-doc
+```
+
+Build and test:
 
 ```sh
 dune build @all
@@ -56,14 +62,14 @@ The example uses Mirage's Cohttp server device:
 ```sh
 cd examples/basic-site
 mirage configure -t unix
-mirage build
+make
 ```
 
 For Solo5:
 
 ```sh
 mirage configure -t hvt
-mirage build
+make
 ```
 
 This checkout does not vendor Mirage packages. Install Mirage, a Solo5 target, and the Cohttp Mirage stack in the switch used for unikernel builds.
@@ -96,3 +102,11 @@ let routes =
     };
   ]
 ```
+
+## Maintainer
+
+Contact: funwithcthulhu29@gmail.com
+
+## License
+
+MIT. See `LICENSE`.
