@@ -174,6 +174,46 @@ let emits_last_modified () =
   Alcotest.(check string) "last modified" "Wed, 27 May 2026 12:00:00 GMT"
     (header response "Last-Modified")
 
+let store_with_last_modified =
+  let file =
+    {
+      Vitrine.content = "<h1>home</h1>";
+      last_modified = Some "Wed, 27 May 2026 12:00:00 GMT";
+    }
+  in
+  Vitrine.Memory_store.(
+    of_entries [ { Vitrine.path = "/index.html"; file } ] |> store)
+
+let if_modified_since_returns_304 () =
+  let response =
+    Vitrine.handle store_with_last_modified
+      (request ~headers:[ ("If-Modified-Since", "Wed, 27 May 2026 12:00:00 GMT") ] "/")
+  in
+  check_status Vitrine.Not_modified response;
+  Alcotest.(check string) "body" "" response.body
+
+let if_modified_since_older_returns_body () =
+  let response =
+    Vitrine.handle store_with_last_modified
+      (request ~headers:[ ("If-Modified-Since", "Wed, 27 May 2026 11:59:59 GMT") ] "/")
+  in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "<h1>home</h1>" response.body
+
+let if_none_match_takes_precedence_over_modified_since () =
+  let response =
+    Vitrine.handle store_with_last_modified
+      (request
+         ~headers:
+           [
+             ("If-None-Match", "\"not-the-current-etag\"");
+             ("If-Modified-Since", "Wed, 27 May 2026 13:00:00 GMT");
+           ]
+         "/")
+  in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "<h1>home</h1>" response.body
+
 let default_security_headers () =
   let response = Vitrine.handle rich_store (request "/") in
   Alcotest.(check string) "nosniff" "nosniff"
@@ -214,6 +254,11 @@ let tests =
     ("compressed mime", `Quick, compressed_response_keeps_original_mime);
     ("q=0 disables encoding", `Quick, q_zero_disables_encoding);
     ("last modified", `Quick, emits_last_modified);
+    ("if-modified-since", `Quick, if_modified_since_returns_304);
+    ("older if-modified-since", `Quick, if_modified_since_older_returns_body);
+    ( "etag precedence",
+      `Quick,
+      if_none_match_takes_precedence_over_modified_since );
     ("security headers", `Quick, default_security_headers);
     ("spa fallback", `Quick, spa_fallback);
     ("unsupported method", `Quick, unsupported_method);

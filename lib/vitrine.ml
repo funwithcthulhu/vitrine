@@ -294,6 +294,80 @@ let trim s =
   let right = right (len - 1) in
   if right < left then "" else String.sub s left (right - left + 1)
 
+let parse_month = function
+  | "Jan" -> Some 1
+  | "Feb" -> Some 2
+  | "Mar" -> Some 3
+  | "Apr" -> Some 4
+  | "May" -> Some 5
+  | "Jun" -> Some 6
+  | "Jul" -> Some 7
+  | "Aug" -> Some 8
+  | "Sep" -> Some 9
+  | "Oct" -> Some 10
+  | "Nov" -> Some 11
+  | "Dec" -> Some 12
+  | _ -> None
+
+let leap_year year =
+  (year mod 4 = 0 && year mod 100 <> 0) || year mod 400 = 0
+
+let days_before_month year month =
+  let common =
+    [| 0; 31; 59; 90; 120; 151; 181; 212; 243; 273; 304; 334 |]
+  in
+  let days = common.(month - 1) in
+  if month > 2 && leap_year year then days + 1 else days
+
+let leaps_before year =
+  let year = year - 1 in
+  (year / 4) - (year / 100) + (year / 400)
+
+let days_before_year year =
+  (365 * (year - 1970)) + leaps_before year - leaps_before 1970
+
+let days_in_month year month =
+  match month with
+  | 1 | 3 | 5 | 7 | 8 | 10 | 12 -> 31
+  | 4 | 6 | 9 | 11 -> 30
+  | 2 -> if leap_year year then 29 else 28
+  | _ -> 0
+
+let parse_time s =
+  match String.split_on_char ':' s with
+  | [ hour; minute; second ] -> (
+      try Some (int_of_string hour, int_of_string minute, int_of_string second)
+      with Failure _ -> None)
+  | _ -> None
+
+let http_date_seconds value =
+  match String.split_on_char ' ' (trim value) with
+  | [ _weekday; day; month; year; time; "GMT" ] -> (
+      match (parse_month month, parse_time time) with
+      | Some month, Some (hour, minute, second) -> (
+          try
+            let day = int_of_string day in
+            let year = int_of_string year in
+            if
+              year >= 1970
+              && day >= 1
+              && day <= days_in_month year month
+              && hour >= 0
+              && hour <= 23
+              && minute >= 0
+              && minute <= 59
+              && second >= 0
+              && second <= 60
+            then
+              let days =
+                days_before_year year + days_before_month year month + day - 1
+              in
+              Some ((days * 86_400) + (hour * 3_600) + (minute * 60) + second)
+            else None
+          with Failure _ -> None)
+      | _ -> None)
+  | _ -> None
+
 let is_zero_q param =
   match String.split_on_char '=' param with
   | [ name; value ] when String.equal (lower (trim name)) "q" -> (
@@ -333,6 +407,19 @@ let if_none_match_matches (request : request) tag =
       |> List.map trim
       |> List.exists (fun candidate -> String.equal candidate "*" || String.equal candidate tag)
 
+let if_modified_since_matches (request : request) file =
+  match (header_of request.headers "If-Modified-Since", file.last_modified) with
+  | Some since_, Some modified -> (
+      match (http_date_seconds since_, http_date_seconds modified) with
+      | Some since_, Some modified -> modified <= since_
+      | _ -> false)
+  | _ -> false
+
+let not_modified (request : request) tag (file : file) =
+  match header_of request.headers "If-None-Match" with
+  | Some _ -> if_none_match_matches request tag
+  | None -> if_modified_since_matches request file
+
 let method_allows_static = function
   | Get | Head -> true
   | Other _ -> false
@@ -347,7 +434,7 @@ let same_method a b = String.equal (method_name a) (method_name b)
 let response_with_body ~config ~(request : request) ~status ~path
     ?content_encoding file =
   let tag = etag file.content in
-  let not_modified = if_none_match_matches request tag in
+  let not_modified = not_modified request tag file in
   let base_headers =
     [
       ("Content-Type", mime_type path);

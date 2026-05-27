@@ -1,5 +1,10 @@
 # Changes
 
+## 0.2.0
+
+- Start conditional request handling for `If-Modified-Since` when embedded
+  files include `Last-Modified` metadata.
+
 ## 0.1.0
 
 - Add static-site serving logic with path normalization, cache headers, ETags,
