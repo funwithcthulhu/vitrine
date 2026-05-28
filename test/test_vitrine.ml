@@ -114,6 +114,17 @@ let if_none_match_returns_304 () =
   check_status Vitrine.Not_modified response;
   Alcotest.(check string) "body" "" response.body
 
+let weak_if_none_match_returns_304 () =
+  let first = Vitrine.handle rich_store (request "/style.css") in
+  let response =
+    Vitrine.handle rich_store
+      (request
+         ~headers:[ ("If-None-Match", "W/" ^ header first "ETag") ]
+         "/style.css")
+  in
+  check_status Vitrine.Not_modified response;
+  Alcotest.(check string) "body" "" response.body
+
 let immutable_cache_for_hashed_assets () =
   let response = Vitrine.handle rich_store (request "/app.0123456789abcdef.js") in
   Alcotest.(check string) "cache" "public, max-age=31536000, immutable"
@@ -247,6 +258,7 @@ let tests =
     ("head headers only", `Quick, head_returns_headers_only);
     ("etag emitted", `Quick, etag_emitted);
     ("if-none-match", `Quick, if_none_match_returns_304);
+    ("weak if-none-match", `Quick, weak_if_none_match_returns_304);
     ("immutable cache", `Quick, immutable_cache_for_hashed_assets);
     ("html cache", `Quick, html_cache_is_revalidate_friendly);
     ("brotli preferred", `Quick, brotli_preferred_over_gzip);

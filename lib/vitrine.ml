@@ -398,6 +398,20 @@ let select_encoding store request path =
     (Gzip, path ^ ".gz")
   else (Identity, path)
 
+let entity_tag_matches tag candidate =
+  let candidate = trim candidate in
+  if String.equal candidate "*" then true
+  else
+    let candidate =
+      if
+        String.length candidate >= 2
+        && Char.equal candidate.[0] 'W'
+        && Char.equal candidate.[1] '/'
+      then trim (String.sub candidate 2 (String.length candidate - 2))
+      else candidate
+    in
+    String.equal candidate tag
+
 let if_none_match_matches (request : request) tag =
   match header_of request.headers "If-None-Match" with
   | None -> false
@@ -405,7 +419,7 @@ let if_none_match_matches (request : request) tag =
       value
       |> String.split_on_char ','
       |> List.map trim
-      |> List.exists (fun candidate -> String.equal candidate "*" || String.equal candidate tag)
+      |> List.exists (entity_tag_matches tag)
 
 let if_modified_since_matches (request : request) file =
   match (header_of request.headers "If-Modified-Since", file.last_modified) with

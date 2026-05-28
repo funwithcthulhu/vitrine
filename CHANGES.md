@@ -4,6 +4,7 @@
 
 - Start conditional request handling for `If-Modified-Since` when embedded
   files include `Last-Modified` metadata.
+- Accept weak `If-None-Match` validators during ETag revalidation.
 
 ## 0.1.0
 

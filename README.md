@@ -82,7 +82,7 @@ Vitrine does not wrap deployment. For Albatross, build the `hvt` target and depl
 
 Requests are normalized before lookup. Traversal attempts are rejected. `/` and directory paths resolve through `index.html`; unresolved paths use `/404.html` when present.
 
-HTML uses `Cache-Control: no-cache`. Filenames with a hex hash segment use `public, max-age=31536000, immutable`. Other static assets use a short public cache lifetime. `If-None-Match` and `If-Modified-Since` requests return `304 Not Modified` when the selected file metadata matches.
+HTML uses `Cache-Control: no-cache`. Filenames with a hex hash segment use `public, max-age=31536000, immutable`. Other static assets use a short public cache lifetime. `If-None-Match` requests, including weak validators, and `If-Modified-Since` requests return `304 Not Modified` when the selected file metadata matches.
 
 If `file.br` or `file.gz` exists and the client advertises support, Vitrine serves the compressed file with the original file's MIME type. Brotli is preferred over gzip.
 
