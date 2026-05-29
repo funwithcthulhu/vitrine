@@ -12,19 +12,6 @@ Install development dependencies for this checkout:
 opam install . --deps-only --with-test --with-doc
 ```
 
-Build and test:
-
-```sh
-dune build @all
-dune runtest
-```
-
-Format:
-
-```sh
-dune fmt
-```
-
 Serve the example site locally:
 
 ```sh
@@ -41,6 +28,14 @@ Create a small project:
 
 ```sh
 dune exec -- vitrine init my_site
+```
+
+## Development
+
+```sh
+dune build @all
+dune runtest
+dune fmt
 ```
 
 ## Layout

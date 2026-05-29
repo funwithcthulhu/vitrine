@@ -10,6 +10,7 @@ let rich_store =
     [
       ("/index.html", "<h1>home</h1>");
       ("/docs/index.html", "<h1>docs</h1>");
+      ("/docs/reference/intro.txt", "intro");
       ("/404.html", "<h1>missing</h1>");
       ("/style.css", "body{}");
       ("/app.0123456789abcdef.js", "console.log('vitrine');");
@@ -43,6 +44,18 @@ let resolves_directory_index () =
   let response = Vitrine.handle rich_store (request "/docs/") in
   check_status Vitrine.Ok response;
   Alcotest.(check string) "body" "<h1>docs</h1>" response.body
+
+let resolves_path_without_leading_slash () =
+  let response = Vitrine.handle rich_store (request "docs/") in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "<h1>docs</h1>" response.body
+
+let resolves_nested_file () =
+  let response =
+    Vitrine.handle rich_store (request "/docs/reference/intro.txt")
+  in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "intro" response.body
 
 let custom_404 () =
   let response = Vitrine.handle rich_store (request "/missing") in
@@ -81,6 +94,7 @@ let mime_types () =
       ("/font.woff2", "font/woff2");
       ("/font.ttf", "font/ttf");
       ("/font.otf", "font/otf");
+      ("/file.unknown", "application/octet-stream");
     ]
   in
   List.iter
@@ -270,6 +284,8 @@ let tests =
   [
     ("root resolves to index", `Quick, resolves_root);
     ("directory resolves to index", `Quick, resolves_directory_index);
+    ("path without leading slash", `Quick, resolves_path_without_leading_slash);
+    ("nested file", `Quick, resolves_nested_file);
     ("custom 404", `Quick, custom_404);
     ("reject traversal", `Quick, rejects_traversal);
     ("reject encoded traversal", `Quick, rejects_encoded_traversal);
