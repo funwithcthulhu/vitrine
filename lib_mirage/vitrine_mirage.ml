@@ -19,7 +19,9 @@ let cohttp_status status =
 let response (vitrine_response : Vitrine.response) =
   let headers = Cohttp.Header.of_list vitrine_response.headers in
   let response =
-    Cohttp.Response.make ~status:(cohttp_status vitrine_response.status) ~headers ()
+    Cohttp.Response.make
+      ~status:(cohttp_status vitrine_response.status)
+      ~headers ()
   in
   (response, Cohttp_lwt.Body.of_string vitrine_response.body)
 

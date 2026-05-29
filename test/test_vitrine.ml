@@ -3,8 +3,7 @@ let file ?last_modified content = { Vitrine.content; last_modified }
 let store entries =
   entries
   |> List.map (fun (path, content) -> { Vitrine.path; file = file content })
-  |> Vitrine.Memory_store.of_entries
-  |> Vitrine.Memory_store.store
+  |> Vitrine.Memory_store.of_entries |> Vitrine.Memory_store.store
 
 let rich_store =
   store
@@ -30,7 +29,9 @@ let header response name =
   | None -> Alcotest.failf "missing header %s" name
 
 let check_status expected response =
-  Alcotest.(check int) "status" (Vitrine.status_to_int expected)
+  Alcotest.(check int)
+    "status"
+    (Vitrine.status_to_int expected)
     (Vitrine.status_to_int response.Vitrine.status)
 
 let resolves_root () =
@@ -93,15 +94,17 @@ let get_returns_body () =
   Alcotest.(check string) "body" "body{}" response.body
 
 let head_returns_headers_only () =
-  let response = Vitrine.handle rich_store (request ~meth:Vitrine.Head "/style.css") in
+  let response =
+    Vitrine.handle rich_store (request ~meth:Vitrine.Head "/style.css")
+  in
   check_status Vitrine.Ok response;
   Alcotest.(check string) "body" "" response.body;
   Alcotest.(check string) "length" "6" (header response "Content-Length")
 
 let etag_emitted () =
   let response = Vitrine.handle rich_store (request "/style.css") in
-  Alcotest.(check bool) "quoted etag"
-    true
+  Alcotest.(check bool)
+    "quoted etag" true
     (let etag = header response "ETag" in
      String.length etag > 2 && etag.[0] = '"')
 
@@ -126,8 +129,11 @@ let weak_if_none_match_returns_304 () =
   Alcotest.(check string) "body" "" response.body
 
 let immutable_cache_for_hashed_assets () =
-  let response = Vitrine.handle rich_store (request "/app.0123456789abcdef.js") in
-  Alcotest.(check string) "cache" "public, max-age=31536000, immutable"
+  let response =
+    Vitrine.handle rich_store (request "/app.0123456789abcdef.js")
+  in
+  Alcotest.(check string)
+    "cache" "public, max-age=31536000, immutable"
     (header response "Cache-Control")
 
 let html_cache_is_revalidate_friendly () =
@@ -158,13 +164,16 @@ let compressed_response_keeps_original_mime () =
     Vitrine.handle rich_store
       (request ~headers:[ ("Accept-Encoding", "br") ] "/app.js")
   in
-  Alcotest.(check string) "mime" "text/javascript; charset=utf-8"
+  Alcotest.(check string)
+    "mime" "text/javascript; charset=utf-8"
     (header response "Content-Type")
 
 let q_zero_disables_encoding () =
   let response =
     Vitrine.handle rich_store
-      (request ~headers:[ ("Accept-Encoding", "br;q=0.000, gzip;q=0.5") ] "/app.js")
+      (request
+         ~headers:[ ("Accept-Encoding", "br;q=0.000, gzip;q=0.5") ]
+         "/app.js")
   in
   check_status Vitrine.Ok response;
   Alcotest.(check string) "encoding" "gzip" (header response "Content-Encoding");
@@ -182,7 +191,8 @@ let emits_last_modified () =
       of_entries [ { Vitrine.path = "/index.html"; file } ] |> store)
   in
   let response = Vitrine.handle store (request "/") in
-  Alcotest.(check string) "last modified" "Wed, 27 May 2026 12:00:00 GMT"
+  Alcotest.(check string)
+    "last modified" "Wed, 27 May 2026 12:00:00 GMT"
     (header response "Last-Modified")
 
 let store_with_last_modified =
@@ -198,7 +208,9 @@ let store_with_last_modified =
 let if_modified_since_returns_304 () =
   let response =
     Vitrine.handle store_with_last_modified
-      (request ~headers:[ ("If-Modified-Since", "Wed, 27 May 2026 12:00:00 GMT") ] "/")
+      (request
+         ~headers:[ ("If-Modified-Since", "Wed, 27 May 2026 12:00:00 GMT") ]
+         "/")
   in
   check_status Vitrine.Not_modified response;
   Alcotest.(check string) "body" "" response.body
@@ -206,7 +218,9 @@ let if_modified_since_returns_304 () =
 let if_modified_since_older_returns_body () =
   let response =
     Vitrine.handle store_with_last_modified
-      (request ~headers:[ ("If-Modified-Since", "Wed, 27 May 2026 11:59:59 GMT") ] "/")
+      (request
+         ~headers:[ ("If-Modified-Since", "Wed, 27 May 2026 11:59:59 GMT") ]
+         "/")
   in
   check_status Vitrine.Ok response;
   Alcotest.(check string) "body" "<h1>home</h1>" response.body
@@ -227,12 +241,16 @@ let if_none_match_takes_precedence_over_modified_since () =
 
 let default_security_headers () =
   let response = Vitrine.handle rich_store (request "/") in
-  Alcotest.(check string) "nosniff" "nosniff"
+  Alcotest.(check string)
+    "nosniff" "nosniff"
     (header response "X-Content-Type-Options");
-  Alcotest.(check string) "referrer" "no-referrer-when-downgrade"
+  Alcotest.(check string)
+    "referrer" "no-referrer-when-downgrade"
     (header response "Referrer-Policy");
-  Alcotest.(check string) "csp"
-    "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+  Alcotest.(check string)
+    "csp"
+    "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors \
+     'none'"
     (header response "Content-Security-Policy")
 
 let spa_fallback () =
@@ -242,7 +260,9 @@ let spa_fallback () =
   Alcotest.(check string) "body" "<h1>home</h1>" response.body
 
 let unsupported_method () =
-  let response = Vitrine.handle rich_store (request ~meth:(Vitrine.Other "POST") "/") in
+  let response =
+    Vitrine.handle rich_store (request ~meth:(Vitrine.Other "POST") "/")
+  in
   check_status Vitrine.Method_not_allowed response;
   Alcotest.(check string) "allow" "GET, HEAD" (header response "Allow")
 
