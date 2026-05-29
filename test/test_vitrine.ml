@@ -10,6 +10,7 @@ let rich_store =
     [
       ("/index.html", "<h1>home</h1>");
       ("/docs/index.html", "<h1>docs</h1>");
+      ("/docs/reference/intro.txt", "intro");
       ("/404.html", "<h1>missing</h1>");
       ("/style.css", "body{}");
       ("/app.0123456789abcdef.js", "console.log('vitrine');");
@@ -44,10 +45,33 @@ let resolves_directory_index () =
   check_status Vitrine.Ok response;
   Alcotest.(check string) "body" "<h1>docs</h1>" response.body
 
+let repeated_slashes_resolve_directory_index () =
+  let response = Vitrine.handle rich_store (request "//docs///") in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "<h1>docs</h1>" response.body
+
+let resolves_path_without_leading_slash () =
+  let response = Vitrine.handle rich_store (request "docs/") in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "<h1>docs</h1>" response.body
+
+let resolves_nested_file () =
+  let response =
+    Vitrine.handle rich_store (request "/docs/reference/intro.txt")
+  in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "intro" response.body
+
 let custom_404 () =
   let response = Vitrine.handle rich_store (request "/missing") in
   check_status Vitrine.Not_found response;
   Alcotest.(check string) "body" "<h1>missing</h1>" response.body
+
+let default_404_without_custom_page () =
+  let store = store [ ("/index.html", "<h1>home</h1>") ] in
+  let response = Vitrine.handle store (request "/missing") in
+  check_status Vitrine.Not_found response;
+  Alcotest.(check string) "body" "not found\n" response.body
 
 let rejects_traversal () =
   let response = Vitrine.handle rich_store (request "/../secret") in
@@ -81,6 +105,7 @@ let mime_types () =
       ("/font.woff2", "font/woff2");
       ("/font.ttf", "font/ttf");
       ("/font.otf", "font/otf");
+      ("/file.unknown", "application/octet-stream");
     ]
   in
   List.iter
@@ -108,6 +133,12 @@ let etag_emitted () =
     (let etag = header response "ETag" in
      String.length etag > 2 && etag.[0] = '"')
 
+let etag_is_content_based () =
+  Alcotest.(check string) "stable" (Vitrine.etag "same") (Vitrine.etag "same");
+  Alcotest.(check bool)
+    "different" false
+    (String.equal (Vitrine.etag "one") (Vitrine.etag "two"))
+
 let if_none_match_returns_304 () =
   let first = Vitrine.handle rich_store (request "/style.css") in
   let response =
@@ -116,6 +147,14 @@ let if_none_match_returns_304 () =
   in
   check_status Vitrine.Not_modified response;
   Alcotest.(check string) "body" "" response.body
+
+let mismatched_if_none_match_returns_body () =
+  let response =
+    Vitrine.handle rich_store
+      (request ~headers:[ ("If-None-Match", "\"not-current\"") ] "/style.css")
+  in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "body{}" response.body
 
 let immutable_cache_for_hashed_assets () =
   let response =
@@ -128,6 +167,31 @@ let immutable_cache_for_hashed_assets () =
 let html_cache_is_revalidate_friendly () =
   let response = Vitrine.handle rich_store (request "/") in
   Alcotest.(check string) "cache" "no-cache" (header response "Cache-Control")
+
+let static_cache_uses_short_public_lifetime () =
+  let response = Vitrine.handle rich_store (request "/style.css") in
+  Alcotest.(check string)
+    "cache" "public, max-age=3600"
+    (header response "Cache-Control")
+
+let cache_control_uses_config_values () =
+  let config =
+    {
+      Vitrine.default_config with
+      html_cache_control = "private, max-age=0";
+      immutable_cache_control = "public, max-age=604800";
+      static_cache_control = "public, max-age=60";
+    }
+  in
+  Alcotest.(check string)
+    "html" "private, max-age=0"
+    (Vitrine.cache_control ~config "/index.html");
+  Alcotest.(check string)
+    "immutable" "public, max-age=604800"
+    (Vitrine.cache_control ~config "/app.0123456789abcdef.js");
+  Alcotest.(check string)
+    "static" "public, max-age=60"
+    (Vitrine.cache_control ~config "/style.css")
 
 let brotli_preferred_over_gzip () =
   let response =
@@ -148,6 +212,26 @@ let gzip_used_when_brotli_unavailable () =
   Alcotest.(check string) "encoding" "gzip" (header response "Content-Encoding");
   Alcotest.(check string) "body" "gzip" response.body
 
+let gzip_used_when_only_gzip_accepted () =
+  let response =
+    Vitrine.handle rich_store
+      (request ~headers:[ ("Accept-Encoding", "gzip") ] "/app.js")
+  in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "encoding" "gzip" (header response "Content-Encoding");
+  Alcotest.(check string) "body" "gzip" response.body
+
+let identity_used_without_supported_encoding () =
+  let response =
+    Vitrine.handle rich_store
+      (request ~headers:[ ("Accept-Encoding", "zstd") ] "/app.js")
+  in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "plain" response.body;
+  Alcotest.(check bool)
+    "no encoding" true
+    (Option.is_none (Vitrine.header response "Content-Encoding"))
+
 let compressed_response_keeps_original_mime () =
   let response =
     Vitrine.handle rich_store
@@ -156,6 +240,22 @@ let compressed_response_keeps_original_mime () =
   Alcotest.(check string)
     "mime" "text/javascript; charset=utf-8"
     (header response "Content-Type")
+
+let compressed_response_sets_vary () =
+  let response =
+    Vitrine.handle rich_store
+      (request ~headers:[ ("Accept-Encoding", "br") ] "/app.js")
+  in
+  Alcotest.(check string) "vary" "Accept-Encoding" (header response "Vary")
+
+let compressed_variant_without_original_is_not_static_match () =
+  let store = store [ ("/app.js.gz", "gzip"); ("/404.html", "missing") ] in
+  let response =
+    Vitrine.handle store
+      (request ~headers:[ ("Accept-Encoding", "gzip") ] "/app.js")
+  in
+  check_status Vitrine.Not_found response;
+  Alcotest.(check string) "body" "missing" response.body
 
 let q_zero_disables_encoding () =
   let response =
@@ -215,19 +315,33 @@ let tests =
   [
     ("root resolves to index", `Quick, resolves_root);
     ("directory resolves to index", `Quick, resolves_directory_index);
+    ("repeated slashes", `Quick, repeated_slashes_resolve_directory_index);
+    ("path without leading slash", `Quick, resolves_path_without_leading_slash);
+    ("nested file", `Quick, resolves_nested_file);
     ("custom 404", `Quick, custom_404);
+    ("default 404", `Quick, default_404_without_custom_page);
     ("reject traversal", `Quick, rejects_traversal);
     ("reject encoded traversal", `Quick, rejects_encoded_traversal);
     ("mime types", `Quick, mime_types);
     ("get body", `Quick, get_returns_body);
     ("head headers only", `Quick, head_returns_headers_only);
     ("etag emitted", `Quick, etag_emitted);
+    ("etag content based", `Quick, etag_is_content_based);
     ("if-none-match", `Quick, if_none_match_returns_304);
+    ("mismatched if-none-match", `Quick, mismatched_if_none_match_returns_body);
     ("immutable cache", `Quick, immutable_cache_for_hashed_assets);
     ("html cache", `Quick, html_cache_is_revalidate_friendly);
+    ("static cache", `Quick, static_cache_uses_short_public_lifetime);
+    ("configured cache", `Quick, cache_control_uses_config_values);
     ("brotli preferred", `Quick, brotli_preferred_over_gzip);
     ("gzip fallback", `Quick, gzip_used_when_brotli_unavailable);
+    ("gzip accepted", `Quick, gzip_used_when_only_gzip_accepted);
+    ("identity encoding", `Quick, identity_used_without_supported_encoding);
     ("compressed mime", `Quick, compressed_response_keeps_original_mime);
+    ("compressed vary", `Quick, compressed_response_sets_vary);
+    ( "compressed without original",
+      `Quick,
+      compressed_variant_without_original_is_not_static_match );
     ("q=0 disables encoding", `Quick, q_zero_disables_encoding);
     ("last modified", `Quick, emits_last_modified);
     ("security headers", `Quick, default_security_headers);

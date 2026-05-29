@@ -168,11 +168,16 @@ let embed site =
         print_endline "    [";
         List.iter
           (fun (entry : Vitrine.entry) ->
-            Printf.printf
-              "      { Vitrine.path = %S; file = { Vitrine.content = %S; \
-               last_modified = %s } };\n"
-              entry.path entry.file.content
-              (ocaml_option_string entry.file.last_modified))
+            Printf.printf "      {\n";
+            Printf.printf "        Vitrine.path = %S;\n" entry.path;
+            Printf.printf "        file =\n";
+            Printf.printf "          {\n";
+            Printf.printf "            Vitrine.content = %S;\n"
+              entry.file.content;
+            Printf.printf "            last_modified = %s;\n"
+              (ocaml_option_string entry.file.last_modified);
+            Printf.printf "          };\n";
+            Printf.printf "      };\n")
           entries;
         print_endline "    ]";
         print_endline "  |> Vitrine.Memory_store.store";

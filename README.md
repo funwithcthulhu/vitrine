@@ -4,6 +4,8 @@ Compile a site directory into a MirageOS web appliance.
 
 Vitrine serves static files from a deterministic store and keeps the HTTP details in one place: path normalization, MIME types, ETags, cache headers, custom 404 pages, precompressed assets, and a small dynamic route hook.
 
+It is currently aimed at small static sites embedded into MirageOS unikernel images. It does not manage deployment, provision Albatross, or choose a store backend for large sites.
+
 ## Quickstart
 
 Install development dependencies for this checkout:
@@ -12,16 +14,11 @@ Install development dependencies for this checkout:
 opam install . --deps-only --with-test --with-doc
 ```
 
-Build and test:
+## Development
 
 ```sh
 dune build @all
 dune runtest
-```
-
-Format:
-
-```sh
 dune fmt
 ```
 
@@ -79,10 +76,6 @@ make
 ```
 
 This checkout does not vendor Mirage packages. Install Mirage, a Solo5 target, and the Cohttp Mirage stack in the switch used for unikernel builds.
-
-## Albatross
-
-Vitrine does not wrap deployment. For Albatross, build the `hvt` target and deploy the resulting Solo5 image with the tooling and network setup used on the target host.
 
 ## HTTP Behavior
 
