@@ -1,35 +1,10 @@
 type meth = Get | Head | Other of string
-
-type status =
-  | Ok
-  | Not_modified
-  | Bad_request
-  | Not_found
-  | Method_not_allowed
-
+type status = Ok | Not_modified | Bad_request | Not_found | Method_not_allowed
 type header = string * string
-
-type request = {
-  meth : meth;
-  path : string;
-  headers : header list;
-}
-
-type response = {
-  status : status;
-  headers : header list;
-  body : string;
-}
-
-type file = {
-  content : string;
-  last_modified : string option;
-}
-
-type entry = {
-  path : string;
-  file : file;
-}
+type request = { meth : meth; path : string; headers : header list }
+type response = { status : status; headers : header list; body : string }
+type file = { content : string; last_modified : string option }
+type entry = { path : string; file : file }
 
 type store = {
   get : string -> file option;
@@ -49,17 +24,15 @@ let default_config =
   {
     spa_fallback = false;
     content_security_policy =
-      Some "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
+      Some
+        "default-src 'self'; object-src 'none'; base-uri 'self'; \
+         frame-ancestors 'none'";
     html_cache_control = "no-cache";
     immutable_cache_control = "public, max-age=31536000, immutable";
     static_cache_control = "public, max-age=3600";
   }
 
-type route = {
-  meth : meth;
-  path : string;
-  handler : request -> response;
-}
+type route = { meth : meth; path : string; handler : request -> response }
 
 let status_to_int = function
   | Ok -> 200
@@ -120,15 +93,14 @@ let json ?(status = Ok) ?(headers = []) body =
     body;
   }
 
-let hash content =
-  Digestif.SHA256.(content |> digest_string |> to_hex)
-
+let hash content = Digestif.SHA256.(content |> digest_string |> to_hex)
 let etag content = "\"" ^ hash content ^ "\""
 
 let has_suffix suffix s =
   let suffix_len = String.length suffix in
   let len = String.length s in
-  len >= suffix_len && String.equal (String.sub s (len - suffix_len) suffix_len) suffix
+  len >= suffix_len
+  && String.equal (String.sub s (len - suffix_len) suffix_len) suffix
 
 let extension path =
   let basename =
@@ -199,8 +171,7 @@ let filename_tokens path =
   in
   loop [] 0 0
 
-let is_hashed_asset path =
-  List.exists is_hex (filename_tokens path)
+let is_hashed_asset path = List.exists is_hex (filename_tokens path)
 
 let cache_class path =
   match extension path with
@@ -214,11 +185,7 @@ let cache_control ?(config = default_config) path =
   | Immutable -> config.immutable_cache_control
   | Static -> config.static_cache_control
 
-type normalized_path = {
-  path : string;
-  directory : bool;
-}
-
+type normalized_path = { path : string; directory : bool }
 type path_error = Traversal | Invalid_path
 
 let normalize_path raw_path =
@@ -228,14 +195,16 @@ let normalize_path raw_path =
     | [] -> raw_path
   in
   let decoded =
-    try Some (Uri.pct_decode path) with
-    | Invalid_argument _ -> None
+    try Some (Uri.pct_decode path) with Invalid_argument _ -> None
   in
   match decoded with
   | None -> Error Invalid_path
   | Some decoded ->
-      if String.exists (fun ch -> Char.equal ch '\000' || Char.equal ch '\\') decoded then
-        Error Invalid_path
+      if
+        String.exists
+          (fun ch -> Char.equal ch '\000' || Char.equal ch '\\')
+          decoded
+      then Error Invalid_path
       else
         let directory = String.equal decoded "" || has_suffix "/" decoded in
         let decoded =
@@ -244,12 +213,15 @@ let normalize_path raw_path =
           else "/" ^ decoded
         in
         let segments =
-          decoded
-          |> String.split_on_char '/'
+          decoded |> String.split_on_char '/'
           |> List.filter (fun segment -> not (String.equal segment ""))
         in
-        if List.exists (fun segment -> String.equal segment "." || String.equal segment "..") segments then
-          Error Traversal
+        if
+          List.exists
+            (fun segment ->
+              String.equal segment "." || String.equal segment "..")
+            segments
+        then Error Traversal
         else
           let path =
             match segments with
@@ -264,10 +236,7 @@ let candidate_paths normalized =
   | path, true -> [ path ^ "/index.html" ]
   | path, false -> [ path; path ^ "/index.html" ]
 
-type selected_encoding =
-  | Identity
-  | Brotli
-  | Gzip
+type selected_encoding = Identity | Brotli | Gzip
 
 let encoding_header = function
   | Identity -> None
@@ -278,17 +247,11 @@ let trim s =
   let len = String.length s in
   let rec left i =
     if i = len then len
-    else
-      match s.[i] with
-      | ' ' | '\t' -> left (i + 1)
-      | _ -> i
+    else match s.[i] with ' ' | '\t' -> left (i + 1) | _ -> i
   in
   let rec right i =
     if i < 0 then -1
-    else
-      match s.[i] with
-      | ' ' | '\t' -> right (i - 1)
-      | _ -> i
+    else match s.[i] with ' ' | '\t' -> right (i - 1) | _ -> i
   in
   let left = left 0 in
   let right = right (len - 1) in
@@ -297,25 +260,24 @@ let trim s =
 let is_zero_q param =
   match String.split_on_char '=' param with
   | [ name; value ] when String.equal (lower (trim name)) "q" -> (
-      try Float.equal (float_of_string (trim value)) 0.0 with
-      | Failure _ -> false)
+      try Float.equal (float_of_string (trim value)) 0.0
+      with Failure _ -> false)
   | _ -> false
 
 let accepts_encoding (request : request) name =
   match header_of request.headers "Accept-Encoding" with
   | None -> false
   | Some value ->
-      value
-      |> String.split_on_char ','
+      value |> String.split_on_char ','
       |> List.exists (fun part ->
-             match String.split_on_char ';' part with
-             | token :: params ->
-                 let token = lower (trim token) in
-                 let q_zero =
-                   List.exists (fun param -> is_zero_q (trim param)) params
-                 in
-                 (String.equal token name || String.equal token "*") && not q_zero
-             | [] -> false)
+          match String.split_on_char ';' part with
+          | token :: params ->
+              let token = lower (trim token) in
+              let q_zero =
+                List.exists (fun param -> is_zero_q (trim param)) params
+              in
+              (String.equal token name || String.equal token "*") && not q_zero
+          | [] -> false)
 
 let select_encoding store request path =
   if accepts_encoding request "br" && store.exists (path ^ ".br") then
@@ -328,14 +290,11 @@ let if_none_match_matches (request : request) tag =
   match header_of request.headers "If-None-Match" with
   | None -> false
   | Some value ->
-      value
-      |> String.split_on_char ','
-      |> List.map trim
-      |> List.exists (fun candidate -> String.equal candidate "*" || String.equal candidate tag)
+      value |> String.split_on_char ',' |> List.map trim
+      |> List.exists (fun candidate ->
+          String.equal candidate "*" || String.equal candidate tag)
 
-let method_allows_static = function
-  | Get | Head -> true
-  | Other _ -> false
+let method_allows_static = function Get | Head -> true | Other _ -> false
 
 let method_name = function
   | Get -> "GET"
@@ -363,7 +322,9 @@ let response_with_body ~config ~(request : request) ~status ~path
   let base_headers =
     match content_encoding with
     | None -> base_headers
-    | Some value -> base_headers @ [ ("Content-Encoding", value); ("Vary", "Accept-Encoding") ]
+    | Some value ->
+        base_headers
+        @ [ ("Content-Encoding", value); ("Vary", "Accept-Encoding") ]
   in
   if not_modified then
     {
@@ -373,24 +334,21 @@ let response_with_body ~config ~(request : request) ~status ~path
     }
   else
     let body =
-      match request.meth with
-      | Head -> ""
-      | Get | Other _ -> file.content
+      match request.meth with Head -> "" | Get | Other _ -> file.content
     in
     {
       status;
       headers =
         base_headers
-        |> ensure_header "Content-Length" (string_of_int (String.length file.content))
+        |> ensure_header "Content-Length"
+             (string_of_int (String.length file.content))
         |> add_security_headers config;
       body;
     }
 
 let plain_response ~config ~(request : request) ~status ~body =
   let body_for_method =
-    match request.meth with
-    | Head -> ""
-    | Get | Other _ -> body
+    match request.meth with Head -> "" | Get | Other _ -> body
   in
   {
     status;
@@ -405,26 +363,31 @@ let plain_response ~config ~(request : request) ~status ~body =
   }
 
 let method_not_allowed ~config request =
-  let response = plain_response ~config ~request ~status:Method_not_allowed ~body:"method not allowed\n" in
+  let response =
+    plain_response ~config ~request ~status:Method_not_allowed
+      ~body:"method not allowed\n"
+  in
   { response with headers = response.headers @ [ ("Allow", "GET, HEAD") ] }
 
 let custom_404 ~config store request =
   match store.get "/404.html" with
-  | Some file -> response_with_body ~config ~request ~status:Not_found ~path:"/404.html" file
-  | None -> plain_response ~config ~request ~status:Not_found ~body:"not found\n"
+  | Some file ->
+      response_with_body ~config ~request ~status:Not_found ~path:"/404.html"
+        file
+  | None ->
+      plain_response ~config ~request ~status:Not_found ~body:"not found\n"
 
 let bad_request ~config request =
   plain_response ~config ~request ~status:Bad_request ~body:"bad request\n"
 
 let finalize_route_response ~config (request : request) response =
   let body =
-    match request.meth with
-    | Head -> ""
-    | Get | Other _ -> response.body
+    match request.meth with Head -> "" | Get | Other _ -> response.body
   in
   let headers =
     response.headers
-    |> ensure_header "Content-Length" (string_of_int (String.length response.body))
+    |> ensure_header "Content-Length"
+         (string_of_int (String.length response.body))
     |> add_security_headers config
   in
   { response with headers; body }
@@ -432,16 +395,15 @@ let finalize_route_response ~config (request : request) response =
 let find_route routes meth path =
   List.find_map
     (fun route ->
-      if same_method route.meth meth && String.equal route.path path then Some route.handler
+      if same_method route.meth meth && String.equal route.path path then
+        Some route.handler
       else None)
     routes
 
 let find_static store normalized =
   List.find_map
     (fun path ->
-      match store.get path with
-      | Some file -> Some (path, file)
-      | None -> None)
+      match store.get path with Some file -> Some (path, file) | None -> None)
     (candidate_paths normalized)
 
 let handle ?(config = default_config) ?(routes = []) store (request : request) =
@@ -449,8 +411,10 @@ let handle ?(config = default_config) ?(routes = []) store (request : request) =
   | Error _ -> bad_request ~config request
   | Ok normalized -> (
       match find_route routes request.meth normalized.path with
-      | Some handler -> handler request |> finalize_route_response ~config request
-      | None when not (method_allows_static request.meth) -> method_not_allowed ~config request
+      | Some handler ->
+          handler request |> finalize_route_response ~config request
+      | None when not (method_allows_static request.meth) ->
+          method_not_allowed ~config request
       | None -> (
           match find_static store normalized with
           | Some (path, _) ->
@@ -464,7 +428,9 @@ let handle ?(config = default_config) ?(routes = []) store (request : request) =
                 ?content_encoding:(encoding_header encoding) file
           | None when config.spa_fallback && same_method request.meth Get -> (
               match store.get "/index.html" with
-              | Some file -> response_with_body ~config ~request ~status:Ok ~path:"/index.html" file
+              | Some file ->
+                  response_with_body ~config ~request ~status:Ok
+                    ~path:"/index.html" file
               | None -> custom_404 ~config store request)
           | None -> custom_404 ~config store request))
 
@@ -481,18 +447,18 @@ let manifest ?(config = default_config) store =
   store.list ()
   |> List.sort_uniq String.compare
   |> List.filter_map (fun path ->
-         match store.get path with
-         | None -> None
-         | Some file ->
-             Some
-               {
-                 manifest_path = path;
-                 size = String.length file.content;
-                 sha256 = hash file.content;
-                 manifest_mime_type = mime_type path;
-                 manifest_cache_class = cache_class path;
-                 manifest_cache_control = cache_control ~config path;
-               })
+      match store.get path with
+      | None -> None
+      | Some file ->
+          Some
+            {
+              manifest_path = path;
+              size = String.length file.content;
+              sha256 = hash file.content;
+              manifest_mime_type = mime_type path;
+              manifest_cache_class = cache_class path;
+              manifest_cache_control = cache_control ~config path;
+            })
 
 module Path_map = Map.Make (String)
 
@@ -506,7 +472,8 @@ module Memory_store = struct
 
   let of_entries entries =
     List.fold_left
-      (fun acc (entry : entry) -> Path_map.add (normalize_entry_path entry.path) entry.file acc)
+      (fun acc (entry : entry) ->
+        Path_map.add (normalize_entry_path entry.path) entry.file acc)
       Path_map.empty entries
 
   let store files =

@@ -1,4 +1,11 @@
 (executable
  (name main)
  (public_name vitrine)
- (libraries vitrine vitrine_mirage cmdliner cohttp cohttp-lwt-unix lwt.unix unix))
+ (libraries
+  vitrine
+  vitrine_mirage
+  cmdliner
+  cohttp
+  cohttp-lwt-unix
+  lwt.unix
+  unix))

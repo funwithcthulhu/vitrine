@@ -19,6 +19,12 @@ dune build @all
 dune runtest
 ```
 
+Format:
+
+```sh
+dune fmt
+```
+
 Serve the example site locally:
 
 ```sh

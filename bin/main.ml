@@ -3,12 +3,12 @@ open Cmdliner
 let fail message = Error message
 
 let is_directory path =
-  try (Unix.stat path).st_kind = Unix.S_DIR with
-  | Unix.Unix_error _ -> false
+  try (Unix.stat path).st_kind = Unix.S_DIR with Unix.Unix_error _ -> false
 
 let mkdir path =
   if Sys.file_exists path then
-    if is_directory path then Ok () else fail (path ^ " exists and is not a directory")
+    if is_directory path then Ok ()
+    else fail (path ^ " exists and is not a directory")
   else
     try
       Unix.mkdir path 0o755;
@@ -19,7 +19,8 @@ let mkdir path =
 let rec mkdir_p path =
   if String.equal path "." || String.equal path "" then Ok ()
   else if Sys.file_exists path then
-    if is_directory path then Ok () else fail (path ^ " exists and is not a directory")
+    if is_directory path then Ok ()
+    else fail (path ^ " exists and is not a directory")
   else
     match mkdir_p (Filename.dirname path) with
     | Error _ as error -> error
@@ -64,9 +65,9 @@ let http_date time =
     |]
   in
   let tm = Unix.gmtime time in
-  Printf.sprintf "%s, %02d %s %04d %02d:%02d:%02d GMT"
-    days.(tm.Unix.tm_wday) tm.Unix.tm_mday months.(tm.Unix.tm_mon)
-    (tm.Unix.tm_year + 1900) tm.Unix.tm_hour tm.Unix.tm_min tm.Unix.tm_sec
+  Printf.sprintf "%s, %02d %s %04d %02d:%02d:%02d GMT" days.(tm.Unix.tm_wday)
+    tm.Unix.tm_mday months.(tm.Unix.tm_mon) (tm.Unix.tm_year + 1900)
+    tm.Unix.tm_hour tm.Unix.tm_min tm.Unix.tm_sec
 
 let entry_path parts = "/" ^ String.concat "/" parts
 
@@ -79,7 +80,7 @@ let rec scan_files root parts =
     (fun result name ->
       match result with
       | Error _ as error -> error
-      | Ok acc ->
+      | Ok acc -> (
           let path = Filename.concat directory name in
           let parts = parts @ [ name ] in
           if is_directory path then
@@ -91,8 +92,8 @@ let rec scan_files root parts =
             | Error _ as error -> error
             | Ok content ->
                 let last_modified =
-                  try Some (http_date (Unix.stat path).Unix.st_mtime) with
-                  | Unix.Unix_error _ -> None
+                  try Some (http_date (Unix.stat path).Unix.st_mtime)
+                  with Unix.Unix_error _ -> None
                 in
                 let entry =
                   {
@@ -100,7 +101,7 @@ let rec scan_files root parts =
                     file = { content; last_modified };
                   }
                 in
-                Ok (acc @ [ entry ]))
+                Ok (acc @ [ entry ])))
     (Ok []) names
 
 let load_site root =
@@ -124,18 +125,22 @@ let manifest output site =
   let result =
     match load_site site with
     | Error _ as error -> error
-    | Ok entries ->
-        let store = entries |> Vitrine.Memory_store.of_entries |> Vitrine.Memory_store.store in
+    | Ok entries -> (
+        let store =
+          entries |> Vitrine.Memory_store.of_entries
+          |> Vitrine.Memory_store.store
+        in
         let lines =
           Vitrine.manifest store
           |> List.map (fun entry ->
-                 Printf.sprintf "%s\t%d\t%s\t%s\t%s\t%s" entry.Vitrine.manifest_path
-                   entry.size entry.sha256 entry.manifest_mime_type
-                   (cache_class_to_string entry.manifest_cache_class)
-                   entry.manifest_cache_control)
+              Printf.sprintf "%s\t%d\t%s\t%s\t%s\t%s"
+                entry.Vitrine.manifest_path entry.size entry.sha256
+                entry.manifest_mime_type
+                (cache_class_to_string entry.manifest_cache_class)
+                entry.manifest_cache_control)
         in
         let content = String.concat "\n" lines ^ "\n" in
-        (match output with
+        match output with
         | None ->
             print_string content;
             Ok ()
@@ -164,7 +169,8 @@ let embed site =
         List.iter
           (fun (entry : Vitrine.entry) ->
             Printf.printf
-              "      { Vitrine.path = %S; file = { Vitrine.content = %S; last_modified = %s } };\n"
+              "      { Vitrine.path = %S; file = { Vitrine.content = %S; \
+               last_modified = %s } };\n"
               entry.path entry.file.content
               (ocaml_option_string entry.file.last_modified))
           entries;
@@ -174,16 +180,13 @@ let embed site =
   in
   run_or_exit result
 
-let init_dune_project name =
-  Printf.sprintf
-    {|(lang dune 3.8)
+let init_dune_project name = Printf.sprintf {|(lang dune 3.8)
 
 (name %s)
-|}
-    name
+|} name
 
 let init_opam _name =
-    {|opam-version: "2.0"
+  {|opam-version: "2.0"
 synopsis: "Static MirageOS site built with Vitrine"
 maintainer: "funwithcthulhu29@gmail.com"
 depends: [
@@ -305,8 +308,7 @@ main {
 }
 |}
 
-let init_js =
-  {|document.documentElement.dataset.vitrine = "ready";
+let init_js = {|document.documentElement.dataset.vitrine = "ready";
 |}
 
 let init_readme name =
@@ -340,8 +342,7 @@ make
     name
 
 let project_name path =
-  path
-  |> String.split_on_char '/'
+  path |> String.split_on_char '/'
   |> List.concat_map (String.split_on_char '\\')
   |> List.filter (fun part -> not (String.equal part ""))
   |> List.rev
@@ -388,7 +389,10 @@ let dev port site =
     match load_site site with
     | Error _ as error -> error
     | Ok entries ->
-        let store = entries |> Vitrine.Memory_store.of_entries |> Vitrine.Memory_store.store in
+        let store =
+          entries |> Vitrine.Memory_store.of_entries
+          |> Vitrine.Memory_store.store
+        in
         let callback = Vitrine_mirage.callback store in
         let server = Cohttp_lwt_unix.Server.make ~callback () in
         Printf.eprintf "Serving %s on http://127.0.0.1:%d\n%!" site port;
@@ -408,7 +412,8 @@ let name_arg =
 
 let output_arg =
   let doc = "Write output to this file." in
-  Arg.(value & opt (some string) None & info [ "o"; "output" ] ~docv:"FILE" ~doc)
+  Arg.(
+    value & opt (some string) None & info [ "o"; "output" ] ~docv:"FILE" ~doc)
 
 let port_arg =
   let doc = "Port to listen on." in
@@ -432,7 +437,8 @@ let dev_cmd =
 
 let cmd =
   let doc = "Compile a site directory into a MirageOS web appliance." in
-  Cmd.group (Cmd.info "vitrine" ~version:"0.1.0" ~doc)
+  Cmd.group
+    (Cmd.info "vitrine" ~version:"0.1.0" ~doc)
     [ init_cmd; manifest_cmd; embed_cmd; dev_cmd ]
 
 let () = exit (Cmd.eval cmd)
