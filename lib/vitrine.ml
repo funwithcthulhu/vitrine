@@ -141,7 +141,7 @@ type cache_class = Html | Immutable | Static
 
 let is_hex s =
   let len = String.length s in
-  len >= 8
+  len >= 6
   &&
   let rec loop i =
     i = len

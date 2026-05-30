@@ -21,6 +21,19 @@ let rich_store =
       ("/app.js.br", "brotli");
     ]
 
+let edge_store =
+  store
+    [
+      ("/index.html", "<h1>home</h1>");
+      ("/404.html", "<h1>missing</h1>");
+      ("/style.css", "body{}");
+      ("/app.3f2a9c.js", "console.log('hash');");
+      ("/app.js", "plain");
+      ("/app.js.gz", "gzip");
+      ("/app.js.br", "brotli");
+      ("/nested/deep.txt", "deep");
+    ]
+
 let request ?(meth = Vitrine.Get) ?(headers = []) path =
   { Vitrine.meth; path; headers }
 
@@ -34,6 +47,9 @@ let check_status expected response =
     "status"
     (Vitrine.status_to_int expected)
     (Vitrine.status_to_int response.Vitrine.status)
+
+let check_header name expected response =
+  Alcotest.(check string) name expected (header response name)
 
 let resolves_root () =
   let response = Vitrine.handle rich_store (request "/") in
@@ -50,10 +66,20 @@ let repeated_slashes_resolve_directory_index () =
   check_status Vitrine.Ok response;
   Alcotest.(check string) "body" "<h1>docs</h1>" response.body
 
+let repeated_slashes_resolve_nested_file () =
+  let response = Vitrine.handle edge_store (request "//nested///deep.txt") in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "deep" response.body
+
 let resolves_path_without_leading_slash () =
   let response = Vitrine.handle rich_store (request "docs/") in
   check_status Vitrine.Ok response;
   Alcotest.(check string) "body" "<h1>docs</h1>" response.body
+
+let encoded_slash_is_path_separator () =
+  let response = Vitrine.handle edge_store (request "/nested%2Fdeep.txt") in
+  check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "deep" response.body
 
 let resolves_nested_file () =
   let response =
@@ -80,6 +106,32 @@ let rejects_traversal () =
 let rejects_encoded_traversal () =
   let response = Vitrine.handle rich_store (request "/%2e%2e/secret") in
   check_status Vitrine.Bad_request response
+
+let rejects_internal_traversal () =
+  let response = Vitrine.handle rich_store (request "/a/../b") in
+  check_status Vitrine.Bad_request response
+
+let traversal_rejection_does_not_query_store () =
+  List.iter
+    (fun path ->
+      let lookups = ref [] in
+      let store =
+        {
+          Vitrine.get =
+            (fun path ->
+              lookups := path :: !lookups;
+              None);
+          exists =
+            (fun path ->
+              lookups := path :: !lookups;
+              false);
+          list = (fun () -> []);
+        }
+      in
+      let response = Vitrine.handle store (request path) in
+      check_status Vitrine.Bad_request response;
+      Alcotest.(check (list string)) path [] !lookups)
+    [ "/%2e%2e/secret"; "/a/../b" ]
 
 let mime_types () =
   let cases =
@@ -164,6 +216,16 @@ let immutable_cache_for_hashed_assets () =
     "cache" "public, max-age=31536000, immutable"
     (header response "Cache-Control")
 
+let cache_headers_for_fixture_paths () =
+  [
+    ("/app.3f2a9c.js", "public, max-age=31536000, immutable");
+    ("/index.html", "no-cache");
+    ("/style.css", "public, max-age=3600");
+  ]
+  |> List.iter (fun (path, expected) ->
+      Vitrine.handle edge_store (request path)
+      |> check_header "Cache-Control" expected)
+
 let html_cache_is_revalidate_friendly () =
   let response = Vitrine.handle rich_store (request "/") in
   Alcotest.(check string) "cache" "no-cache" (header response "Cache-Control")
@@ -202,6 +264,17 @@ let brotli_preferred_over_gzip () =
   Alcotest.(check string) "encoding" "br" (header response "Content-Encoding");
   Alcotest.(check string) "body" "brotli" response.body
 
+let brotli_selected_from_edge_fixture () =
+  let response =
+    Vitrine.handle edge_store
+      (request ~headers:[ ("Accept-Encoding", "br, gzip") ] "/app.js")
+  in
+  check_status Vitrine.Ok response;
+  check_header "Content-Encoding" "br" response;
+  check_header "Content-Type" "text/javascript; charset=utf-8" response;
+  check_header "ETag" (Vitrine.etag "brotli") response;
+  Alcotest.(check string) "body" "brotli" response.body
+
 let gzip_used_when_brotli_unavailable () =
   let only_gzip = store [ ("/app.js", "plain"); ("/app.js.gz", "gzip") ] in
   let response =
@@ -221,12 +294,36 @@ let gzip_used_when_only_gzip_accepted () =
   Alcotest.(check string) "encoding" "gzip" (header response "Content-Encoding");
   Alcotest.(check string) "body" "gzip" response.body
 
+let gzip_selected_from_edge_fixture () =
+  let response =
+    Vitrine.handle edge_store
+      (request ~headers:[ ("Accept-Encoding", "gzip") ] "/app.js")
+  in
+  check_status Vitrine.Ok response;
+  check_header "Content-Encoding" "gzip" response;
+  check_header "Content-Type" "text/javascript; charset=utf-8" response;
+  check_header "ETag" (Vitrine.etag "gzip") response;
+  Alcotest.(check string) "body" "gzip" response.body
+
 let identity_used_without_supported_encoding () =
   let response =
     Vitrine.handle rich_store
       (request ~headers:[ ("Accept-Encoding", "zstd") ] "/app.js")
   in
   check_status Vitrine.Ok response;
+  Alcotest.(check string) "body" "plain" response.body;
+  Alcotest.(check bool)
+    "no encoding" true
+    (Option.is_none (Vitrine.header response "Content-Encoding"))
+
+let unsupported_encoding_uses_original_asset () =
+  let response =
+    Vitrine.handle edge_store
+      (request ~headers:[ ("Accept-Encoding", "zstd") ] "/app.js")
+  in
+  check_status Vitrine.Ok response;
+  check_header "Content-Type" "text/javascript; charset=utf-8" response;
+  check_header "ETag" (Vitrine.etag "plain") response;
   Alcotest.(check string) "body" "plain" response.body;
   Alcotest.(check bool)
     "no encoding" true
@@ -311,17 +408,47 @@ let unsupported_method () =
   check_status Vitrine.Method_not_allowed response;
   Alcotest.(check string) "allow" "GET, HEAD" (header response "Allow")
 
+let manifest_paths entries =
+  List.map (fun entry -> entry.Vitrine.manifest_path) entries
+
+let manifest_is_stable_and_sorted_for_nested_fixture () =
+  let first = Vitrine.manifest edge_store in
+  let second = Vitrine.manifest edge_store in
+  Alcotest.(check (list string))
+    "stable paths" (manifest_paths first) (manifest_paths second);
+  Alcotest.(check (list string))
+    "sorted paths"
+    [
+      "/404.html";
+      "/app.3f2a9c.js";
+      "/app.js";
+      "/app.js.br";
+      "/app.js.gz";
+      "/index.html";
+      "/nested/deep.txt";
+      "/style.css";
+    ]
+    (manifest_paths first)
+
 let tests =
   [
     ("root resolves to index", `Quick, resolves_root);
     ("directory resolves to index", `Quick, resolves_directory_index);
     ("repeated slashes", `Quick, repeated_slashes_resolve_directory_index);
+    ( "repeated slashes nested file",
+      `Quick,
+      repeated_slashes_resolve_nested_file );
     ("path without leading slash", `Quick, resolves_path_without_leading_slash);
+    ("encoded slash", `Quick, encoded_slash_is_path_separator);
     ("nested file", `Quick, resolves_nested_file);
     ("custom 404", `Quick, custom_404);
     ("default 404", `Quick, default_404_without_custom_page);
     ("reject traversal", `Quick, rejects_traversal);
     ("reject encoded traversal", `Quick, rejects_encoded_traversal);
+    ("reject internal traversal", `Quick, rejects_internal_traversal);
+    ( "traversal skips store lookup",
+      `Quick,
+      traversal_rejection_does_not_query_store );
     ("mime types", `Quick, mime_types);
     ("get body", `Quick, get_returns_body);
     ("head headers only", `Quick, head_returns_headers_only);
@@ -330,13 +457,19 @@ let tests =
     ("if-none-match", `Quick, if_none_match_returns_304);
     ("mismatched if-none-match", `Quick, mismatched_if_none_match_returns_body);
     ("immutable cache", `Quick, immutable_cache_for_hashed_assets);
+    ("cache header fixture", `Quick, cache_headers_for_fixture_paths);
     ("html cache", `Quick, html_cache_is_revalidate_friendly);
     ("static cache", `Quick, static_cache_uses_short_public_lifetime);
     ("configured cache", `Quick, cache_control_uses_config_values);
     ("brotli preferred", `Quick, brotli_preferred_over_gzip);
+    ("brotli edge fixture", `Quick, brotli_selected_from_edge_fixture);
     ("gzip fallback", `Quick, gzip_used_when_brotli_unavailable);
     ("gzip accepted", `Quick, gzip_used_when_only_gzip_accepted);
+    ("gzip edge fixture", `Quick, gzip_selected_from_edge_fixture);
     ("identity encoding", `Quick, identity_used_without_supported_encoding);
+    ( "unsupported encoding edge fixture",
+      `Quick,
+      unsupported_encoding_uses_original_asset );
     ("compressed mime", `Quick, compressed_response_keeps_original_mime);
     ("compressed vary", `Quick, compressed_response_sets_vary);
     ( "compressed without original",
@@ -347,6 +480,7 @@ let tests =
     ("security headers", `Quick, default_security_headers);
     ("spa fallback", `Quick, spa_fallback);
     ("unsupported method", `Quick, unsupported_method);
+    ("manifest sorted", `Quick, manifest_is_stable_and_sorted_for_nested_fixture);
   ]
 
 let () = Alcotest.run "vitrine" [ ("static serving", tests) ]
